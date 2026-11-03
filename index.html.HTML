@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Ciclo del Agua Phygital Interactivo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        :root {
+            --app-height: 100dvh;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: var(--app-height);
+            max-height: var(--app-height);
+            overflow: hidden;
+            background-color: #031525;
+            color: #f1f5f9;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        .glass-panel {
+            background: rgba(3, 21, 37, 0.94);
+            border-color: rgba(56, 189, 248, 0.20);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+
+        .log-container::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .log-container::-webkit-scrollbar-thumb {
+            background-color: #0284c7;
+            border-radius: 3px;
+        }
+
+        #scannerCanvas {
+            transform: scaleX(-1);
+        }
+
+        .banner-story {
+            position: absolute;
+            top: clamp(0.35rem, 1.2vh, 0.75rem);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(3, 21, 37, 0.85);
+            border: 1px solid rgba(56, 189, 248, 0.40);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 25;
+            box-shadow: 0 6px 20px -2px rgba(0, 0, 0, 0.6);
+            border-radius: 9999px;
+            max-width: 92vw;
+            pointer-events: none;
+        }
+
+        .btn-card {
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .btn-card:active {
+            transform: scale(0.92);
+        }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row w-screen h-[100dvh] overflow-hidden">
+
+    <!-- PANTALLA INICIAL DE BIENVENIDA -->
+    <div id="startOverlay" class="absolute inset-0 bg-slate-950/95 z-50 flex flex-col items-center justify-center text-center p-4 transition-opacity duration-500">
+        <div class="max-w-md w-full bg-slate-900/95 p-6 md:p-8 rounded-2xl border border-sky-600/40 shadow-[0_0_50px_rgba(2,132,199,0.35)]">
+            <h1 class="text-3xl sm:text-4xl text-white font-extrabold mb-3 tracking-wide">💧 El Ciclo del Agua</h1>
+            <p class="text-sky-200 text-xs sm:text-sm mb-6 leading-relaxed text-left sm:text-center">
+                Controla la naturaleza mostrando tarjetas físicas o pulsando los botones interactivos:<br><br>
+                <span class="text-yellow-300 font-bold">🟡 Amarillo:</span> El sol calienta el mar y el valle; el pasto se seca pasando de verde a amarillo y café. Se cargan las 5 nubes al 100%.<br>
+                <span class="text-emerald-300 font-bold">🟢 Verde:</span> El sol apunta rayos de calor a las dos montañas, derritiendo la nieve hacia los ríos.<br>
+                <span class="text-blue-300 font-bold">🔵 Azul:</span> La lluvia cae de las 5 nubes (mín. 50% de agua) sobre montañas, valle y mar. La lluvia recupera el pasto verde.<br>
+                <span class="text-rose-300 font-bold">🔴 Rojo + 🔵 Azul:</span> Viento polar congela la lluvia en nieve solo en las 2 nubes sobre las montañas; en el valle y el mar solo llueve.
+            </p>
+            <button id="startBtn" class="w-full bg-sky-500 hover:bg-sky-400 active:scale-95 text-slate-950 font-black py-3.5 px-6 rounded-xl text-base sm:text-lg shadow-[0_0_25px_rgba(2,132,199,0.45)] transition-all">
+                COMENZAR EXPERIENCIA
+            </button>
+        </div>
+    </div>
+
+    <!-- PANEL LATERAL ADAPTABLE Y COMPACTO (RESPONSIVO EN MÓVIL Y ESCRITORIO) -->
+    <aside class="glass-panel w-full md:w-[220px] lg:w-[250px] shrink-0 h-auto md:h-full flex flex-col p-2.5 sm:p-3 border-b md:border-b-0 md:border-r border-sky-900/40 z-10 max-h-[30dvh] md:max-h-full overflow-y-auto">
+        
+        <header class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-sky-800/40 shrink-0">
+            <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                <span class="text-[11px] font-bold tracking-wider text-white uppercase">Sensor Óptico</span>
+            </div>
+            <span class="text-[9px] text-sky-400 font-mono font-semibold">VISION HSL</span>
+        </header>
+
+        <div class="flex md:flex-col gap-2 shrink-0">
+            <!-- Visor en espejo de la cámara -->
+            <video id="camera" class="hidden" autoplay playsinline muted></video>
+            <div class="relative w-24 sm:w-28 md:w-full aspect-[4/3] bg-black rounded-lg overflow-hidden border border-sky-900 shrink-0 shadow-inner">
+                <canvas id="scannerCanvas" class="w-full h-full object-cover"></canvas>
+                <div class="absolute inset-0 pointer-events-none opacity-20" style="background: repeating-linear-gradient(0deg, transparent, transparent 2px, #000 2px, #000 4px);"></div>
+            </div>
+
+            <!-- Barras medidoras de color -->
+            <section class="flex-1 flex flex-col justify-center gap-1 sm:gap-1.5">
+                <!-- Amarillo: Evaporación -->
+                <div>
+                    <div class="flex justify-between text-[9px] sm:text-[10px] mb-0.5 text-yellow-300 font-semibold">
+                        <span>[AM] Evapora</span>
+                        <span id="yellowVal">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                        <div id="yellowBar" class="bg-yellow-400 h-full rounded-full transition-all duration-75" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Verde: Deshielo -->
+                <div>
+                    <div class="flex justify-between text-[9px] sm:text-[10px] mb-0.5 text-emerald-300 font-semibold">
+                        <span>[VD] Deshielo</span>
+                        <span id="greenVal">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                        <div id="greenBar" class="bg-emerald-400 h-full rounded-full transition-all duration-75" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Azul: Lluvia -->
+                <div>
+                    <div class="flex justify-between text-[9px] sm:text-[10px] mb-0.5 text-blue-300 font-semibold">
+                        <span>[AZ] Lluvia</span>
+                        <span id="blueVal">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                        <div id="blueBar" class="bg-blue-400 h-full rounded-full transition-all duration-75" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Rojo: Viento polar -->
+                <div>
+                    <div class="flex justify-between text-[9px] sm:text-[10px] mb-0.5 text-rose-300 font-semibold">
+                        <span>[RJ] Viento</span>
+                        <span id="redVal">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-700">
+                        <div id="redBar" class="bg-rose-400 h-full rounded-full transition-all duration-75" style="width: 0%"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Botones táctiles manuales para presentaciones didácticas -->
+        <div class="mt-2 pt-2 border-t border-sky-900/40 flex flex-wrap gap-1 shrink-0">
+            <span class="text-[8px] text-sky-400/80 font-bold uppercase w-full">Control Didáctico:</span>
+            <button id="btnYellow" class="btn-card px-1.5 py-1 text-[9px] bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/50 rounded flex-1 text-center font-bold">☀️ Evap</button>
+            <button id="btnGreen" class="btn-card px-1.5 py-1 text-[9px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 rounded flex-1 text-center font-bold">🔥 Sol Cima</button>
+            <button id="btnBlue" class="btn-card px-1.5 py-1 text-[9px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/50 rounded flex-1 text-center font-bold">🌧️ Lluvia</button>
+            <button id="btnRed" class="btn-card px-1.5 py-1 text-[9px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/50 rounded flex-1 text-center font-bold">💨 Viento</button>
+            <button id="btnSnow" class="btn-card px-2 py-1 text-[9px] bg-cyan-500/30 hover:bg-cyan-500/40 text-cyan-200 border border-cyan-400/70 rounded w-full font-black text-center shadow-sm">❄️ Nieve (AZ + RJ)</button>
+        </div>
+
+        <!-- Consola de registro de eventos (oculta en pantallas muy bajas para optimizar espacio) -->
+        <footer class="hidden md:flex flex-1 mt-2 min-h-[45px] bg-slate-950/70 border border-sky-950 rounded-lg p-2 overflow-y-auto log-container font-mono text-[9px] leading-tight" id="consoleLog">
+            <p class="text-sky-400/80">> Muestra una tarjeta para activar el ciclo...</p>
+        </footer>
+    </aside>
+
+    <!-- LIENZO PRINCIPAL AUTO-RESPONSIVO CON SOPORTE HIGH-DPI -->
+    <main class="relative flex-1 w-full h-full overflow-hidden bg-sky-300" id="ecosystemContainer">
+        <canvas id="ecosystemCanvas" class="block w-full h-full"></canvas>
+
+        <!-- BANNER DIDÁCTICO DISCRETO EN FORMATO PÍLDORA -->
+        <div class="banner-story px-3 sm:px-4 py-1.5 flex items-center justify-center gap-1.5 sm:gap-2.5 text-center pointer-events-none">
+            <span class="text-[10px] sm:text-xs font-black text-amber-300 tracking-wide uppercase whitespace-nowrap flex items-center gap-1" id="phaseTitle">
+                <span>🏔️</span> CICLO DEL AGUA
+            </span>
+            <span class="text-sky-500/60 text-[9px] sm:text-xs hidden sm:inline">•</span>
+            <span class="text-[9px] sm:text-[11px] text-sky-100/95 font-medium truncate max-w-[220px] sm:max-w-md" id="phaseDesc">
+                Muestra una tarjeta para activar la naturaleza
+            </span>
+        </div>
+    </main>
+
+    <script>
+        // =========================================================================
+        // 1. GESTIÓN RESPONSIVA Y ELEMENTOS DOM
+        // =========================================================================
+        const video = document.getElementById('camera');
+        const scannerCanvas = document.getElementById('scannerCanvas');
+        const scanCtx = scannerCanvas.getContext('2d', { willReadFrequently: true });
+
+        const ecosystemContainer = document.getElementById('ecosystemContainer');
+        const ecosystemCanvas = document.getElementById('ecosystemCanvas');
+        const ecoCtx = ecosystemCanvas.getContext('2d');
+
+        const bannerTitle = document.getElementById('phaseTitle');
+        const bannerDesc = document.getElementById('phaseDesc');
+
+        let cw = 0;
+        let ch = 0;
+        let dpr = 1;
+
+        /**
+         * Redimensiona dinámicamente el lienzo manteniendo nitidez en pantallas Retina / 4K
+         */
+        function resizeCanvas() {
+            dpr = window.devicePixelRatio || 1;
+            cw = ecosystemContainer.clientWidth;
+            ch = ecosystemContainer.clientHeight;
+
+            ecosystemCanvas.width = Math.floor(cw * dpr);
+            ecosystemCanvas.height = Math.floor(ch * dpr);
+            ecoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        const resizeObserver = new ResizeObserver(() => resizeCanvas());
+        resizeObserver.observe(ecosystemContainer);
+
+        // =========================================================================
+        // 2. ACTIVACIÓN DE CÁMARA (ESPEJO)
+        // =========================================================================
+        let cameraActive = false;
+
+        function startCamera() {
+            if (cameraActive) return;
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                addLog("Error: Navegador sin soporte de cámara.", "text-rose-400");
+                return;
+            }
+
+            navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false
+            })
+            .then(stream => {
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play()
+                        .then(() => {
+                            cameraActive = true;
+                            addLog("Sensor óptico activo.", "text-sky-400");
+                        })
+                        .catch(err => addLog("Error video: " + err.message, "text-rose-400"));
+                };
+            })
+            .catch(err => {
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    addLog("Permiso de cámara denegado.", "text-rose-400");
+                } else {
+                    addLog("Error cámara: " + err.message, "text-rose-400");
+                }
+            });
+        }
+
+        // =========================================================================
+        // 3. ESTADO DEL CICLO DEL AGUA Y ACTORES
+        // =========================================================================
+        let cycleState = {
+            snowVolume: 0.65,    // Manto de nieve en cumbre (0.0 a 1.0)
+            riverCurrent: 0.05,  // Caudal del río (0.02 = hilito, 1.0 = caudaloso)
+            oceanLevel: 0.85,    // Nivel del mar (baja con amarillo, sube con verde)
+            meltingRate: 0.0,    // Tasa activa de deshielo
+            evapRate: 0.0,       // Tasa activa de evaporación
+            grassMoisture: 1.0   // Humedad del pasto (1.0 = verde vivo, 0.5 = amarillo seco, 0.0 = café árido)
+        };
+
+        // El Sol viajero (Navega entre el Océano y la Cumbre)
+        let sunActor = {
+            x: 0.84,
+            y: 0.16,
+            targetX: 0.84,
+            targetY: 0.16,
+            isOverMountain: false,
+            raysHeat: 0.0,
+            seaHeat: 0.0,
+            meadowHeat: 0.0
+        };
+
+        // 5 Nubes de vapor que se llenan, se oscurecen y cubren todo el cielo
+        let stormClouds = [
+            { x: 0.64, y: 0.16, targetX: 0.64, waterCharge: 0.0, scale: 0.85 },
+            { x: 0.72, y: 0.11, targetX: 0.72, waterCharge: 0.0, scale: 0.95 },
+            { x: 0.81, y: 0.18, targetX: 0.81, waterCharge: 0.0, scale: 1.05 },
+            { x: 0.89, y: 0.12, targetX: 0.89, waterCharge: 0.0, scale: 0.90 },
+            { x: 0.96, y: 0.19, targetX: 0.96, waterCharge: 0.0, scale: 0.82 }
+        ];
+
+        let rainActive = false; // Estado de lluvia activa desde las nubes
+
+        // Entidades y partículas
+        let raindrops = [];
+        let snowflakes = [];
+        let riverGotitas = [];
+        let waterWheelAngle = 0;
+        let oceanFishes = [
+            { x: 0.74, depthRatio: 0.40, flip: 1, timer: 0 },
+            { x: 0.84, depthRatio: 0.65, flip: -1, timer: 40 },
+            { x: 0.93, depthRatio: 0.80, flip: 1, timer: 80 }
+        ];
+        let oceanBubbles = [];
+        let jumpingDolphin = {
+            progress: 0,
+            active: false,
+            timer: 0,
+            startX: 0.75
+        };
+        let steamSprites = [];
+        let cloudAbsorptionPuffs = [];
+        let windGusts = [];
+
+        let weather = { blue: 0, green: 0, red: 0, yellow: 0 };
+        let manualOverrides = { yellow: false, green: false, blue: false, red: false, snowCombo: false };
+        let lastLog = "";
+
+        // =========================================================================
+        // 4. MOTOR DE AUDIO SINTÉTICO (WEB AUDIO API)
+        // =========================================================================
+        let audioCtx;
+        const synths = {};
+
+        function createNoiseSource(ctx) {
+            const bufferSize = ctx.sampleRate * 2;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            const noise = ctx.createBufferSource();
+            noise.buffer = buffer;
+            noise.loop = true;
+            return noise;
+        }
+
+        function initAudio() {
+            if (audioCtx) {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                return;
+            }
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContextClass();
+
+            // Viento gélido
+            const windNoise = createNoiseSource(audioCtx);
+            const windFilter = audioCtx.createBiquadFilter();
+            windFilter.type = 'bandpass';
+            windFilter.frequency.value = 520;
+            windFilter.Q.value = 3.5;
+            synths.windGain = audioCtx.createGain();
+            synths.windGain.gain.value = 0;
+            windNoise.connect(windFilter).connect(synths.windGain).connect(audioCtx.destination);
+            windNoise.start();
+
+            // Río de montaña
+            const riverNoise = createNoiseSource(audioCtx);
+            const riverFilter = audioCtx.createBiquadFilter();
+            riverFilter.type = 'lowpass';
+            riverFilter.frequency.value = 800;
+            synths.riverGain = audioCtx.createGain();
+            synths.riverGain.gain.value = 0;
+            riverNoise.connect(riverFilter).connect(synths.riverGain).connect(audioCtx.destination);
+            riverNoise.start();
+
+            // Lluvia
+            const rainNoise = createNoiseSource(audioCtx);
+            const rainFilter = audioCtx.createBiquadFilter();
+            rainFilter.type = 'lowpass';
+            rainFilter.frequency.value = 1100;
+            synths.rainGain = audioCtx.createGain();
+            synths.rainGain.gain.value = 0;
+            rainNoise.connect(rainFilter).connect(synths.rainGain).connect(audioCtx.destination);
+            rainNoise.start();
+
+            // Océano
+            const oceanNoise = createNoiseSource(audioCtx);
+            const oceanFilter = audioCtx.createBiquadFilter();
+            oceanFilter.type = 'lowpass';
+            oceanFilter.frequency.value = 450;
+            synths.oceanGain = audioCtx.createGain();
+            synths.oceanGain.gain.value = 0;
+            oceanNoise.connect(oceanFilter).connect(synths.oceanGain).connect(audioCtx.destination);
+            oceanNoise.start();
+        }
+
+        // Activación mediante botón inicial
+        document.getElementById('startBtn').addEventListener('click', () => {
+            const overlay = document.getElementById('startOverlay');
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.style.display = 'none', 500);
+            initAudio();
+            startCamera();
+            addLog("Ecosistema en línea.", "text-sky-400");
+        });
+
+        // Configuración de botones de prueba manual
+        function setupManualButton(id, key) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                initAudio();
+                manualOverrides[key] = !manualOverrides[key];
+                btn.classList.toggle('ring-2', manualOverrides[key]);
+                btn.classList.toggle('ring-white', manualOverrides[key]);
+            });
+        }
+
+        setupManualButton('btnYellow', 'yellow');
+        setupManualButton('btnGreen', 'green');
+        setupManualButton('btnBlue', 'blue');
+        setupManualButton('btnRed', 'red');
+        setupManualButton('btnSnow', 'snowCombo');
+
+        // =========================================================================
+        // 5. DETECCIÓN HSL POR VISIÓN ARTIFICIAL
+        // =========================================================================
+        function rgbToHsl(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h = 0, s = 0, l = (max + min) / 2;
+
+            if (max !== min) {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
+        }
+
+        function analyzeColors(data, width, height) {
+            let blue = 0, green = 0, red = 0, yellow = 0;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const [h, s, l] = rgbToHsl(data[i], data[i+1], data[i+2]);
+                if (l > 18 && l < 82) {
+                    if (s > 30 && h >= 190 && h <= 255) blue++;
+                    else if (s > 30 && h >= 68 && h <= 168) green++;
+                    else if (s > 45 && (h >= 345 || h <= 15)) red++;
+                    else if (s > 55 && h >= 42 && h <= 60) yellow++;
+                }
+            }
+
+            const total = width * height;
+            const mult = 18;
+            return {
+                blue: Math.min(100, (blue / total) * 100 * mult),
+                green: Math.min(100, (green / total) * 100 * mult),
+                red: Math.min(100, (red / total) * 100 * mult),
+                yellow: Math.min(100, (yellow / total) * 100 * mult)
+            };
+        }
+
+        function addLog(msg, colorClass) {
+            if (msg === lastLog) return;
+            lastLog = msg;
+            const logBox = document.getElementById('consoleLog');
+            if (!logBox) return;
+            const time = new Date().toLocaleTimeString('es-ES', { hour12: false });
+            logBox.innerHTML += `<div class="${colorClass}">[${time}] > ${msg}</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        // =========================================================================
+        // 6. TRAZADO MATEMÁTICO DEL RÍO CON MEANDROS Y CURVAS
+        // =========================================================================
+        function getRiverPathPoints(w, h) {
+            return [
+                { x: w * 0.19, y: h * 0.43 }, // 0: Nace en la cumbre
+                { x: w * 0.23, y: h * 0.49 }, // 1: Bajada por la ladera rocosa
+                { x: w * 0.16, y: h * 0.55 }, // 2: Curva 1: Gran meandro izquierdo entrando al prado verde
+                { x: w * 0.25, y: h * 0.60 }, // 3: Vuelve hacia la derecha por el valle
+                { x: w * 0.36, y: h * 0.64 }, // 4: Curva 2: Pasa exactamente junto al Molino y la Noria
+                { x: w * 0.29, y: h * 0.70 }, // 5: Curva 3: Meandro que gira hacia la izquierda
+                { x: w * 0.19, y: h * 0.75 }, // 6: Gran meandro profundo en el sector oeste
+                { x: w * 0.26, y: h * 0.81 }, // 7: Vuelve a subir hacia la vega central
+                { x: w * 0.37, y: h * 0.83 }, // 8: Curva 4: Recorre el centro del pueblo
+                { x: w * 0.46, y: h * 0.76 }, // 9: Curva 5: Pasa bajo el puente de piedra antiguo
+                { x: w * 0.55, y: h * 0.71 }, // 10: Curva 6: Meandro alto en la pradera oriental
+                { x: w * 0.51, y: h * 0.82 }, // 11: Meandro que desciende hacia el sur
+                { x: w * 0.59, y: h * 0.87 }, // 12: Curva 7: Amplio giro en la pradera baja
+                { x: w * 0.66, y: h * 0.82 }, // 13: Se ensancha al aproximarse a la costa
+                { x: w * 0.72, y: h * 0.85 }  // 14: Desemboca suavemente en el océano
+            ];
+        }
+
+        function getRiverPointAt(points, t) {
+            const numSegments = points.length - 1;
+            const scaledT = Math.max(0, Math.min(0.999, t)) * numSegments;
+            const idx = Math.floor(scaledT);
+            const localT = scaledT - idx;
+
+            const p0 = points[Math.max(0, idx - 1)];
+            const p1 = points[idx];
+            const p2 = points[Math.min(points.length - 1, idx + 1)];
+            const p3 = points[Math.min(points.length - 1, idx + 2)];
+
+            const t2 = localT * localT;
+            const t3 = t2 * localT;
+
+            const x = 0.5 * ((2 * p1.x) +
+                (-p0.x + p2.x) * localT +
+                (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+                (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+
+            const y = 0.5 * ((2 * p1.y) +
+                (-p0.y + p2.y) * localT +
+                (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+                (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+
+            return { x, y };
+        }
+
+        // =========================================================================
+        // 7. COMPONENTES ILUSTRADOS (SOL, NUBES, CASAS, MOLINO, FAUNA)
+        // =========================================================================
+        function drawSmilingSun(ctx, x, y, radius, time, isOverMountain, raysIntensity, seaHeatIntensity = 0.0, meadowHeatIntensity = 0.0) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            // Halo pulsante
+            const haloGrad = ctx.createRadialGradient(0, 0, radius * 0.8, 0, 0, radius * 2.5);
+            haloGrad.addColorStop(0, 'rgba(254, 240, 138, 0.45)');
+            haloGrad.addColorStop(0.5, 'rgba(251, 191, 36, 0.20)');
+            haloGrad.addColorStop(1, 'rgba(251, 191, 36, 0)');
+            ctx.fillStyle = haloGrad;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Rayos en corona giratoria
+            ctx.save();
+            ctx.rotate(time * 0.35);
+            ctx.fillStyle = '#fde047';
+            ctx.strokeStyle = '#ca8a04';
+            ctx.lineWidth = 1.5;
+
+            const rayCount = 12;
+            for (let i = 0; i < rayCount; i++) {
+                ctx.rotate(Math.PI / 6);
+                const rayLen = radius + 14 + Math.sin(time * 4 + i) * 6;
+                ctx.beginPath();
+                ctx.moveTo(-4, -radius);
+                ctx.lineTo(0, -rayLen);
+                ctx.lineTo(4, -radius);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // Rayos directos de calor si está activo el deshielo: apuntan hacia las montañas y la nieve
+            if (isOverMountain && raysIntensity > 0.05) {
+                ctx.save();
+                const baseAngles = [
+                    Math.PI * 0.62,
+                    Math.PI * 0.68,
+                    Math.PI * 0.74,
+                    Math.PI * 0.80,
+                    Math.PI * 0.86,
+                    Math.PI * 0.92
+                ];
+
+                baseAngles.forEach((angle, idx) => {
+                    const waveOffset = Math.sin(time * 6 + idx) * 0.02;
+                    const finalAngle = angle + waveOffset;
+                    const beamLen = Math.max(cw, ch) * 0.70;
+
+                    const rayG = ctx.createLinearGradient(0, 0, Math.cos(finalAngle) * beamLen, Math.sin(finalAngle) * beamLen);
+                    rayG.addColorStop(0, `rgba(254, 240, 138, ${raysIntensity * 0.85})`);
+                    rayG.addColorStop(0.3, `rgba(251, 191, 36, ${raysIntensity * 0.45})`);
+                    rayG.addColorStop(0.8, `rgba(245, 158, 11, ${raysIntensity * 0.15})`);
+                    rayG.addColorStop(1, 'rgba(245, 158, 11, 0)');
+
+                    ctx.fillStyle = rayG;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(Math.cos(finalAngle - 0.055) * beamLen, Math.sin(finalAngle - 0.055) * beamLen);
+                    ctx.lineTo(Math.cos(finalAngle + 0.055) * beamLen, Math.sin(finalAngle + 0.055) * beamLen);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+                ctx.restore();
+            }
+
+            // Rayos directos de calor si está activa la evaporación (Amarillo): apuntan y calientan el mar
+            if (!isOverMountain && seaHeatIntensity > 0.05) {
+                ctx.save();
+                const seaAngles = [
+                    Math.PI * 0.38,
+                    Math.PI * 0.43,
+                    Math.PI * 0.48,
+                    Math.PI * 0.53,
+                    Math.PI * 0.58,
+                    Math.PI * 0.63
+                ];
+
+                seaAngles.forEach((angle, idx) => {
+                    const waveOffset = Math.sin(time * 6.5 + idx * 1.5) * 0.025;
+                    const finalAngle = angle + waveOffset;
+                    const beamLen = Math.max(cw, ch) * 0.85;
+
+                    const rayG = ctx.createLinearGradient(0, 0, Math.cos(finalAngle) * beamLen, Math.sin(finalAngle) * beamLen);
+                    rayG.addColorStop(0, `rgba(254, 240, 138, ${seaHeatIntensity * 0.90})`);
+                    rayG.addColorStop(0.35, `rgba(251, 191, 36, ${seaHeatIntensity * 0.55})`);
+                    rayG.addColorStop(0.8, `rgba(245, 158, 11, ${seaHeatIntensity * 0.25})`);
+                    rayG.addColorStop(1, 'rgba(245, 158, 11, 0)');
+
+                    ctx.fillStyle = rayG;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(Math.cos(finalAngle - 0.055) * beamLen, Math.sin(finalAngle - 0.055) * beamLen);
+                    ctx.lineTo(Math.cos(finalAngle + 0.055) * beamLen, Math.sin(finalAngle + 0.055) * beamLen);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+                ctx.restore();
+            }
+
+            // Rayos de calor que caen sobre el valle y secan el pasto (Fase Amarilla)
+            if (!isOverMountain && meadowHeatIntensity > 0.05) {
+                ctx.save();
+                const meadowAngles = [
+                    Math.PI * 0.66,
+                    Math.PI * 0.72,
+                    Math.PI * 0.78,
+                    Math.PI * 0.84,
+                    Math.PI * 0.90
+                ];
+
+                meadowAngles.forEach((angle, idx) => {
+                    const waveOffset = Math.sin(time * 5.5 + idx * 1.8) * 0.02;
+                    const finalAngle = angle + waveOffset;
+                    const beamLen = Math.max(cw, ch) * 0.95;
+
+                    const rayG = ctx.createLinearGradient(0, 0, Math.cos(finalAngle) * beamLen, Math.sin(finalAngle) * beamLen);
+                    rayG.addColorStop(0, `rgba(254, 240, 138, ${meadowHeatIntensity * 0.75})`);
+                    rayG.addColorStop(0.35, `rgba(251, 191, 36, ${meadowHeatIntensity * 0.40})`);
+                    rayG.addColorStop(0.8, `rgba(245, 158, 11, ${meadowHeatIntensity * 0.15})`);
+                    rayG.addColorStop(1, 'rgba(245, 158, 11, 0)');
+
+                    ctx.fillStyle = rayG;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(Math.cos(finalAngle - 0.05) * beamLen, Math.sin(finalAngle - 0.05) * beamLen);
+                    ctx.lineTo(Math.cos(finalAngle + 0.05) * beamLen, Math.sin(finalAngle + 0.05) * beamLen);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+                ctx.restore();
+            }
+
+            // Cuerpo del Sol
+            const sunGrad = ctx.createRadialGradient(-radius * 0.3, -radius * 0.3, radius * 0.1, 0, 0, radius);
+            sunGrad.addColorStop(0, '#fef08a');
+            sunGrad.addColorStop(0.7, '#facc15');
+            sunGrad.addColorStop(1, '#eab308');
+            ctx.fillStyle = sunGrad;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#ca8a04';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Mejillas sonrosadas
+            ctx.fillStyle = 'rgba(244, 63, 94, 0.45)';
+            ctx.beginPath();
+            ctx.arc(-radius * 0.45, radius * 0.18, radius * 0.22, 0, Math.PI * 2);
+            ctx.arc(radius * 0.45, radius * 0.18, radius * 0.22, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ojitos animados con parpadeo
+            const blink = Math.sin(time * 2) > 0.96;
+            ctx.fillStyle = '#1e293b';
+            if (blink) {
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = '#1e293b';
+                ctx.beginPath();
+                ctx.arc(-radius * 0.3, -radius * 0.08, 5, 0, Math.PI);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(radius * 0.3, -radius * 0.08, 5, 0, Math.PI);
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.arc(-radius * 0.3, -radius * 0.08, 4.5, 0, Math.PI * 2);
+                ctx.arc(radius * 0.3, -radius * 0.08, 4.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(-radius * 0.3 - 1.2, -radius * 0.08 - 1.2, 1.6, 0, Math.PI * 2);
+                ctx.arc(radius * 0.3 - 1.2, -radius * 0.08 - 1.2, 1.6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Sonrisa alegre
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 2.8;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.arc(0, radius * 0.12, radius * 0.42, 0.15 * Math.PI, 0.85 * Math.PI);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawStormCloud(ctx, cloud, time, baseScale) {
+            ctx.save();
+            ctx.translate(cloud.x * cw, cloud.y * ch);
+
+            const charge = Math.min(1.0, cloud.waterCharge);
+            const scale = (cloud.scale + charge * 0.45) * baseScale;
+            ctx.scale(scale, scale);
+
+            // Interpolación de color: de Blanco níveo a Negro Tormenta
+            const r = Math.round(250 - charge * 230);
+            const g = Math.round(250 - charge * 225);
+            const b = Math.round(255 - charge * 220);
+
+            if (charge >= 0.95) {
+                ctx.shadowColor = Math.sin(time * 12) > 0.4 ? 'rgba(56, 189, 248, 0.9)' : 'rgba(234, 179, 8, 0.8)';
+                ctx.shadowBlur = 18;
+            } else {
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+                ctx.shadowBlur = 8;
+            }
+
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            ctx.strokeStyle = charge > 0.8 ? '#0f172a' : '#94a3b8';
+            ctx.lineWidth = 3;
+
+            // Silueta algodonosa
+            ctx.beginPath();
+            ctx.arc(0, 0, 28, 0, Math.PI * 2);
+            ctx.arc(-22, -6, 22, 0, Math.PI * 2);
+            ctx.arc(24, -4, 24, 0, Math.PI * 2);
+            ctx.arc(-40, 8, 18, 0, Math.PI * 2);
+            ctx.arc(42, 8, 19, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Cartelito flotante con porcentaje de carga
+            ctx.shadowBlur = 0;
+            const pct = Math.round(charge * 100);
+            ctx.font = 'bold 10px monospace';
+            const badgeTxt = pct >= 98 ? '⚡ 100%' : `💧 ${pct}%`;
+            const badgeW = ctx.measureText(badgeTxt).width + 10;
+            ctx.fillStyle = charge >= 0.98 ? '#ef4444' : '#0284c7';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-badgeW / 2, -42, badgeW, 16, 6);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(badgeTxt, -badgeW / 2 + 5, -30);
+
+            ctx.restore();
+        }
+
+        function drawVaporDrop(ctx, drop) {
+            ctx.save();
+            ctx.translate(drop.x, drop.y);
+
+            // Halo cálido
+            ctx.fillStyle = `rgba(254, 240, 138, ${drop.alpha * 0.45})`;
+            ctx.beginPath();
+            ctx.arc(0, 0, drop.size * 2.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Cuerpo de la gotita
+            ctx.fillStyle = `rgba(56, 189, 248, ${drop.alpha})`;
+            ctx.beginPath();
+            ctx.moveTo(0, -drop.size * 1.6);
+            ctx.quadraticCurveTo(drop.size, 0, drop.size, drop.size);
+            ctx.arc(0, drop.size, drop.size, 0, Math.PI);
+            ctx.quadraticCurveTo(-drop.size, 0, 0, -drop.size * 1.6);
+            ctx.closePath();
+            ctx.fill();
+
+            // Destello blanco
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(-drop.size * 0.3, drop.size * 0.6, drop.size * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawLittleFish(ctx, x, y, flip, time) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(flip, 1);
+
+            const wag = Math.sin(time * 8) * 3;
+
+            // Cuerpo
+            ctx.fillStyle = '#f97316';
+            ctx.strokeStyle = '#ea580c';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 9, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Cola
+            ctx.fillStyle = '#fb923c';
+            ctx.beginPath();
+            ctx.moveTo(-7, 0);
+            ctx.lineTo(-14, -6 + wag);
+            ctx.lineTo(-11, wag);
+            ctx.lineTo(-14, 6 + wag);
+            ctx.closePath();
+            ctx.fill();
+
+            // Ojo
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(5, -1.5, 1.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawDolphin(ctx, x, y, scale, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.scale(scale, scale);
+
+            ctx.shadowColor = 'rgba(2, 132, 199, 0.35)';
+            ctx.shadowBlur = 6;
+
+            // Cuerpo curvo
+            ctx.fillStyle = '#0284c7';
+            ctx.strokeStyle = '#0369a1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(25, -2);
+            ctx.bezierCurveTo(20, -14, -8, -14, -25, 0);
+            ctx.bezierCurveTo(-15, 12, 12, 10, 25, -2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Panza blanca
+            ctx.fillStyle = '#f0f9ff';
+            ctx.beginPath();
+            ctx.moveTo(22, -1);
+            ctx.bezierCurveTo(12, 6, -8, 7, -22, 1);
+            ctx.bezierCurveTo(-12, 11, 10, 8, 22, -1);
+            ctx.fill();
+
+            // Aleta dorsal
+            ctx.fillStyle = '#0369a1';
+            ctx.beginPath();
+            ctx.moveTo(0, -12);
+            ctx.quadraticCurveTo(-6, -24, -14, -18);
+            ctx.quadraticCurveTo(-7, -13, -2, -11);
+            ctx.fill();
+
+            // Cola
+            ctx.fillStyle = '#0284c7';
+            ctx.beginPath();
+            ctx.moveTo(-25, 0);
+            ctx.lineTo(-33, -9);
+            ctx.quadraticCurveTo(-28, 0, -33, 9);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Ojo
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(16, -4, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(16.5, -4, 1.4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawHouse(ctx, x, y, scale, roofColor, time) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            // Sombra suave proyectada sobre el pasto
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.beginPath();
+            ctx.ellipse(0, 6, 18, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Chimenea de piedra y humo animado
+            ctx.fillStyle = '#78716c';
+            ctx.fillRect(8, -26, 7, 14);
+            ctx.strokeStyle = '#44403c';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(8, -26, 7, 14);
+
+            for (let i = 0; i < 3; i++) {
+                const puffAge = (time * 1.5 + i * 0.8) % 2.5;
+                const puffY = -28 - puffAge * 11;
+                const puffX = 11 + Math.sin(puffAge * 3) * 4;
+                ctx.fillStyle = `rgba(241, 245, 249, ${Math.max(0, 0.65 - puffAge * 0.22)})`;
+                ctx.beginPath();
+                ctx.arc(puffX, puffY, 3.5 + puffAge * 2.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Paredes principales de la casita
+            ctx.fillStyle = '#fef08a';
+            ctx.strokeStyle = '#713f12';
+            ctx.lineWidth = 2;
+            ctx.fillRect(-14, -14, 28, 20);
+            ctx.strokeRect(-14, -14, 28, 20);
+
+            // Zócalo de piedra en la base
+            ctx.fillStyle = '#a8a29e';
+            ctx.fillRect(-14, 2, 28, 4);
+            ctx.strokeStyle = '#57534e';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-14, 2, 28, 4);
+
+            // Techo triangular a dos aguas
+            ctx.fillStyle = roofColor;
+            ctx.beginPath();
+            ctx.moveTo(-18, -14);
+            ctx.lineTo(0, -28);
+            ctx.lineTo(18, -14);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#450a0a';
+            ctx.lineWidth = 2.2;
+            ctx.stroke();
+
+            // Puerta de madera con pomo dorado
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(-4, -4, 8, 10);
+            ctx.strokeStyle = '#451a03';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-4, -4, 8, 10);
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.arc(2, 1, 1, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ventana iluminada con marco y cruz
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillRect(-11, -10, 6, 6);
+            ctx.strokeStyle = '#0369a1';
+            ctx.lineWidth = 1.2;
+            ctx.strokeRect(-11, -10, 6, 6);
+            ctx.beginPath();
+            ctx.moveTo(-8, -10); ctx.lineTo(-8, -4);
+            ctx.moveTo(-11, -7); ctx.lineTo(-5, -7);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawWaterMill(ctx, x, y, scale, angle, riverCurrent) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            // Edificio rústico del Molino de Agua
+            ctx.fillStyle = '#57534e';
+            ctx.strokeStyle = '#292524';
+            ctx.lineWidth = 1.8;
+            ctx.fillRect(-18, -4, 36, 18);
+            ctx.strokeRect(-18, -4, 36, 18);
+
+            // Paredes de madera con tablones verticales
+            ctx.fillStyle = '#b45309';
+            ctx.fillRect(-16, -24, 32, 20);
+            ctx.strokeRect(-16, -24, 32, 20);
+
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 1;
+            for (let bx = -11; bx <= 11; bx += 5.5) {
+                ctx.beginPath();
+                ctx.moveTo(bx, -24);
+                ctx.lineTo(bx, -4);
+                ctx.stroke();
+            }
+
+            // Techo de tejas rojas a dos aguas
+            ctx.fillStyle = '#991b1b';
+            ctx.beginPath();
+            ctx.moveTo(-22, -24);
+            ctx.lineTo(0, -38);
+            ctx.lineTo(22, -24);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#450a0a';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Ventanita redonda iluminada en el ático
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(0, -29, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#0369a1';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+
+            // Puerta de entrada
+            ctx.fillStyle = '#451a03';
+            ctx.fillRect(-5, 0, 10, 14);
+
+            // Canaleta de madera
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(8, -14, 16, 5);
+
+            // Noria de Agua Giratoria (Rueda hidráulica con paletas)
+            ctx.save();
+            ctx.translate(22, 3);
+            ctx.rotate(angle);
+
+            const wheelR = 21;
+
+            ctx.strokeStyle = '#92400e';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, wheelR, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.arc(0, 0, wheelR * 0.6, 0, Math.PI * 2);
+            ctx.stroke();
+
+            const blades = 8;
+            for (let i = 0; i < blades; i++) {
+                const bAngle = (i * Math.PI * 2) / blades;
+                const cosA = Math.cos(bAngle);
+                const sinA = Math.sin(bAngle);
+
+                ctx.strokeStyle = '#78350f';
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(cosA * wheelR, sinA * wheelR);
+                ctx.stroke();
+
+                ctx.fillStyle = '#b45309';
+                ctx.strokeStyle = '#451a03';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.rect(cosA * wheelR - 3.5, sinA * wheelR - 3.5, 7, 7);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // Eje central de hierro fundido
+            ctx.fillStyle = '#292524';
+            ctx.beginPath();
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#e2e8f0';
+            ctx.beginPath();
+            ctx.arc(-1.5, -1.5, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            // Salpicaduras animadas generadas por el giro de la rueda en el agua
+            if (riverCurrent > 0.05) {
+                const splashCount = Math.floor(riverCurrent * 5) + 1;
+                for (let k = 0; k < splashCount; k++) {
+                    const sx = 22 + Math.sin(angle * 3 + k) * 14;
+                    const sy = 16 + Math.cos(angle * 2 + k) * 5;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 1.5 + Math.random() * 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function drawWoodenFence(ctx, x, y, len, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.strokeStyle = '#78350f';
+            ctx.fillStyle = '#92400e';
+            ctx.lineWidth = 1.5;
+
+            for (let px = 0; px <= len; px += 8) {
+                ctx.fillRect(px - 1.5, -8, 3, 9);
+                ctx.strokeRect(px - 1.5, -8, 3, 9);
+            }
+            ctx.fillRect(-2, -6, len + 4, 2);
+            ctx.fillRect(-2, -3, len + 4, 2);
+            ctx.restore();
+        }
+
+        function drawPineTree(ctx, x, y, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(-2, -4, 4, 8);
+
+            ctx.fillStyle = '#15803d';
+            ctx.beginPath();
+            ctx.moveTo(0, -22);
+            ctx.lineTo(-9, -12);
+            ctx.lineTo(9, -12);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#166534';
+            ctx.beginPath();
+            ctx.moveTo(0, -15);
+            ctx.lineTo(-12, -4);
+            ctx.lineTo(12, -4);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Interpolador de color para el estado de sequía / humedad del pasto (Verde -> Amarillo -> Café)
+        function getMeadowLayerColors(moisture) {
+            const m = Math.max(0, Math.min(1, moisture));
+            const interpolate = (c1, c2, factor) => {
+                const r = Math.round(c1[0] + (c2[0] - c1[0]) * factor);
+                const g = Math.round(c1[1] + (c2[1] - c1[1]) * factor);
+                const b = Math.round(c1[2] + (c2[2] - c1[2]) * factor);
+                return `rgb(${r}, ${g}, ${b})`;
+            };
+
+            const green = [[21, 128, 61], [22, 163, 74], [34, 197, 94]];
+            const yellow = [[202, 138, 4], [234, 179, 8], [250, 204, 21]];
+            const brown = [[84, 51, 16], [113, 63, 18], [133, 77, 14]];
+
+            if (m >= 0.5) {
+                const factor = (m - 0.5) / 0.5; // 0 = yellow, 1 = green
+                return [
+                    interpolate(yellow[0], green[0], factor),
+                    interpolate(yellow[1], green[1], factor),
+                    interpolate(yellow[2], green[2], factor)
+                ];
+            } else {
+                const factor = m / 0.5; // 0 = brown, 1 = yellow
+                return [
+                    interpolate(brown[0], yellow[0], factor),
+                    interpolate(brown[1], yellow[1], factor),
+                    interpolate(brown[2], yellow[2], factor)
+                ];
+            }
+        }
+
+        // =========================================================================
+        // 8. BUCLE PRINCIPAL DE FÍSICAS Y RENDERIZADO
+        // =========================================================================
+        function loop() {
+            const time = Date.now() / 1000;
+            // Escala adaptativa calculada combinando ancho y alto para evitar deformaciones
+            const baseScale = Math.min(Math.max(Math.min(cw / 850, ch / 550), 0.45), 1.5);
+
+            // Detección con la cámara
+            if (video.readyState >= 2 && video.videoWidth > 0) {
+                scannerCanvas.width = video.videoWidth;
+                scannerCanvas.height = video.videoHeight;
+                scanCtx.drawImage(video, 0, 0, scannerCanvas.width, scannerCanvas.height);
+
+                const imgData = scanCtx.getImageData(0, 0, scannerCanvas.width, scannerCanvas.height);
+                weather = analyzeColors(imgData.data, scannerCanvas.width, scannerCanvas.height);
+            }
+
+            // Aplicar overrides manuales
+            const isYellow = weather.yellow > 10 || manualOverrides.yellow;
+            const isGreen  = weather.green > 10 || manualOverrides.green;
+            const isBlue   = weather.blue > 10 || manualOverrides.blue || manualOverrides.snowCombo;
+            const isRed    = weather.red > 10 || manualOverrides.red || manualOverrides.snowCombo;
+
+            // Actualizar barras
+            document.getElementById('yellowBar').style.width = (isYellow ? 85 : weather.yellow) + '%';
+            document.getElementById('yellowVal').innerText = Math.round(isYellow ? 85 : weather.yellow) + '%';
+            document.getElementById('greenBar').style.width = (isGreen ? 85 : weather.green) + '%';
+            document.getElementById('greenVal').innerText = Math.round(isGreen ? 85 : weather.green) + '%';
+            document.getElementById('blueBar').style.width = (isBlue ? 85 : weather.blue) + '%';
+            document.getElementById('blueVal').innerText = Math.round(isBlue ? 85 : weather.blue) + '%';
+            document.getElementById('redBar').style.width = (isRed ? 85 : weather.red) + '%';
+            document.getElementById('redVal').innerText = Math.round(isRed ? 85 : weather.red) + '%';
+
+            // --- LÓGICA DE LAS 4 FASES DIDÁCTICAS ---
+            // 1. AMARILLO: Evaporación, baja el mar, rayos secan el pasto y carga las 3 nubes
+            if (isYellow) {
+                cycleState.evapRate = Math.min(1.0, cycleState.evapRate + 0.02);
+                cycleState.oceanLevel = Math.max(0.30, cycleState.oceanLevel - 0.0018);
+
+                // El sol calienta el valle secando el pasto (de verde a amarillo y café)
+                cycleState.grassMoisture = Math.max(0.0, cycleState.grassMoisture - 0.0022);
+
+                const seaYNow = ch * 0.74 + (1 - cycleState.oceanLevel) * (ch * 0.14);
+                if (Math.random() < 0.45) {
+                    const chosenCloud = stormClouds[Math.floor(Math.random() * stormClouds.length)];
+                    steamSprites.push({
+                        x: (cw * 0.72) + Math.random() * (cw * 0.25),
+                        y: seaYNow - 5,
+                        targetCloud: chosenCloud,
+                        size: (2.5 + Math.random() * 3.5) * baseScale,
+                        alpha: 0.95
+                    });
+                }
+
+                let allFull = true;
+                stormClouds.forEach(c => {
+                    c.waterCharge = Math.min(1.0, c.waterCharge + 0.0022);
+                    if (c.waterCharge < 0.95) allFull = false;
+                });
+
+                if (allFull) {
+                    // Se distribuyen desplegándose por todo el cielo: cumbres, valle, pradera y mar
+                    stormClouds[0].targetX = 0.12; // Cima secundaria y cumbre oeste
+                    stormClouds[1].targetX = 0.24; // Cumbre principal y ladera de la montaña
+                    stormClouds[2].targetX = 0.46; // Valle central y pueblo
+                    stormClouds[3].targetX = 0.68; // Planicie oriental y costa
+                    stormClouds[4].targetX = 0.88; // Sobre el océano
+                } else {
+                    stormClouds[0].targetX = 0.64;
+                    stormClouds[1].targetX = 0.72;
+                    stormClouds[2].targetX = 0.81;
+                    stormClouds[3].targetX = 0.89;
+                    stormClouds[4].targetX = 0.96;
+                }
+
+                if (!allFull) {
+                    bannerTitle.innerHTML = "<span>☀️</span> FASE 1: Evaporación y Sequía";
+                    bannerDesc.innerText = "El sol calienta el mar y seca el valle (verde ➔ amarillo ➔ café). Las 5 nubes se cargan.";
+                } else {
+                    bannerTitle.innerHTML = "<span>☁️⚡</span> 5 Nubes Cargadas al 100%";
+                    bannerDesc.innerText = "¡100% negras de agua! Se despliegan por todo el cielo: montañas, valle y mar.";
+                }
+            } else {
+                cycleState.evapRate = Math.max(0.0, cycleState.evapRate - 0.01);
+            }
+
+            // Movimiento suave de las 3 nubes hacia su targetX
+            stormClouds.forEach(c => {
+                c.x += (c.targetX - c.x) * 0.018;
+            });
+
+            // 2. VERDE: El sol viaja a la montaña, proyecta rayos y derrite la nieve
+            if (isGreen) {
+                sunActor.targetX = 0.33;
+                sunActor.targetY = 0.14;
+                sunActor.isOverMountain = true;
+
+                bannerTitle.innerHTML = "<span>🔥</span> FASE 2: Deshielo y Río";
+                bannerDesc.innerText = "Rayos solares calientan las dos montañas, derritiendo la nieve hacia los ríos.";
+
+                if (cycleState.snowVolume > 0.05) {
+                    cycleState.snowVolume = Math.max(0.04, cycleState.snowVolume - 0.004);
+                    cycleState.meltingRate = Math.min(1.0, cycleState.meltingRate + 0.03);
+                    cycleState.riverCurrent = Math.min(1.0, cycleState.riverCurrent + 0.025);
+                }
+
+                if (cycleState.riverCurrent > 0.2) {
+                    cycleState.oceanLevel = Math.min(1.0, cycleState.oceanLevel + 0.003);
+                }
+            } else {
+                sunActor.targetX = 0.84;
+                sunActor.targetY = 0.16;
+                sunActor.isOverMountain = false;
+                cycleState.meltingRate = Math.max(0.0, cycleState.meltingRate - 0.015);
+                cycleState.riverCurrent = Math.max(0.04, cycleState.riverCurrent - 0.008);
+            }
+
+            sunActor.x += (sunActor.targetX - sunActor.x) * 0.025;
+            sunActor.y += (sunActor.targetY - sunActor.y) * 0.025;
+            sunActor.raysHeat += ((isGreen ? 1.0 : 0.0) - sunActor.raysHeat) * 0.03;
+            sunActor.seaHeat += (((isYellow && !isGreen) ? 1.0 : 0.0) - sunActor.seaHeat) * 0.04;
+            sunActor.meadowHeat += (((isYellow && !isGreen) ? 1.0 : 0.0) - sunActor.meadowHeat) * 0.04;
+
+            // 3. AZUL: Precipitación condicionada al agua de las 3 nubes
+            const avgCloudWater = stormClouds.reduce((sum, c) => sum + c.waterCharge, 0) / stormClouds.length;
+            const anyCloudHasWater = stormClouds.some(c => c.waterCharge > 0.02);
+
+            if (isBlue) {
+                // Para comenzar a llover, las nubes deben tener al menos 50% de agua cargada
+                if (!rainActive && (avgCloudWater >= 0.50 || stormClouds.some(c => c.waterCharge >= 0.50))) {
+                    rainActive = true;
+                }
+                // Si se descargan las 3 nubes por completo, se detiene la lluvia
+                if (rainActive && !anyCloudHasWater) {
+                    rainActive = false;
+                }
+
+                if (rainActive) {
+                    // La lluvia recupera la humedad del pasto (vuelve de café/amarillo a verde)
+                    cycleState.grassMoisture = Math.min(1.0, cycleState.grassMoisture + 0.0045);
+                    cycleState.riverCurrent = Math.min(0.65, cycleState.riverCurrent + 0.003);
+                    cycleState.oceanLevel = Math.min(1.0, cycleState.oceanLevel + 0.001);
+
+                    if (isRed) {
+                        bannerTitle.innerHTML = "<span>❄️</span> ¡Nieve en Cumbres y Lluvia!";
+                        bannerDesc.innerText = "Las 2 nubes sobre las montañas descargan nieve solo en las cumbres; en el valle y el mar solo llueve.";
+                        cycleState.snowVolume = Math.min(1.0, cycleState.snowVolume + 0.008);
+                    } else {
+                        bannerTitle.innerHTML = "<span>🌧️</span> Lluvia desde las Nubes";
+                        bannerDesc.innerText = "¡Las nubes descargan agua! Riega la tierra y el pasto seco vuelve a ser verde.";
+                    }
+
+                    // La precipitación cae DIRECTAMENTE desde la base de cada nube con agua
+                    stormClouds.forEach((c, idx) => {
+                        if (c.waterCharge > 0.02) {
+                            const cloudW = 52 * c.scale * baseScale;
+                            const cloudX = c.x * cw;
+                            const cloudY = c.y * ch + 18 * c.scale * baseScale;
+                            const dropsToSpawn = Math.ceil(c.waterCharge * 4);
+
+                            // Las dos primeras nubes (índices 0 y 1) están situadas exclusivamente sobre las montañas
+                            const isMountainCloud = (idx === 0 || idx === 1);
+
+                            for (let k = 0; k < dropsToSpawn; k++) {
+                                if (isRed && isMountainCloud) {
+                                    // Nieve estrictamente localizada sobre las cumbres montañosas (no cae en el valle)
+                                    const minMountX = cw * 0.02;
+                                    const maxMountX = cw * 0.35;
+                                    const snowX = Math.max(minMountX, Math.min(maxMountX, cloudX + (Math.random() - 0.5) * cloudW));
+
+                                    snowflakes.push({
+                                        x: snowX,
+                                        y: cloudY + Math.random() * 8,
+                                        vx: (Math.random() - 0.35) * 0.6 * baseScale, // Caída vertical suave y localizada
+                                        vy: (1.4 + Math.random() * 2.0) * baseScale,
+                                        size: (2.2 + Math.random() * 3.2) * baseScale,
+                                        alpha: 0.95
+                                    });
+                                } else {
+                                    // Lluvia en el valle, pueblo, costa y mar (o en montañas si no hay viento polar)
+                                    const dropX = cloudX + (Math.random() - 0.5) * cloudW;
+                                    raindrops.push({
+                                        x: dropX,
+                                        y: cloudY + Math.random() * 8,
+                                        vx: isRed ? 2.8 : (Math.random() - 0.5) * 0.8,
+                                        vy: (8.5 + Math.random() * 6) * baseScale,
+                                        len: (11 + Math.random() * 12) * baseScale
+                                    });
+                                }
+                            }
+
+                            // La nube se descarga gradualmente
+                            c.waterCharge = Math.max(0.0, c.waterCharge - 0.0022);
+                        }
+                    });
+                } else {
+                    // No hay suficiente agua en las nubes para que llueva
+                    if (!anyCloudHasWater) {
+                        bannerTitle.innerHTML = "<span>☁️❌</span> Nubes sin agua (0%)";
+                        bannerDesc.innerText = "¡Las 5 nubes se han descargado! Usa amarillo para evaporar agua del mar.";
+                    } else {
+                        const pctTxt = Math.round(avgCloudWater * 100);
+                        bannerTitle.innerHTML = `<span>☁️💧</span> Nubes poco cargadas (${pctTxt}%)`;
+                        bannerDesc.innerText = "Necesitan al menos 50% de agua para llover. ¡Calienta el mar con amarillo!";
+                    }
+                }
+            } else {
+                rainActive = false;
+                if (isRed && !isBlue) {
+                    bannerTitle.innerHTML = "<span>💨</span> FASE 4: Viento Gélido";
+                    bannerDesc.innerText = "Soplan vientos fuertes (+ Azul con nubes cargadas para congelar en nieve).";
+                }
+            }
+
+            // Ráfagas de viento polar visible
+            if (isRed) {
+                if (Math.random() < 0.75) {
+                    windGusts.push({
+                        x: -80 * baseScale,
+                        y: Math.random() * (ch * 0.85),
+                        len: (90 + Math.random() * 150) * baseScale,
+                        speed: (14 + Math.random() * 12) * baseScale,
+                        swirl: Math.random() < 0.4,
+                        alpha: 0.85,
+                        thickness: (2.0 + Math.random() * 2.2) * baseScale
+                    });
+                }
+            }
+
+            // Gotitas en el río
+            const riverPts = getRiverPathPoints(cw, ch);
+            if (Math.random() < (0.15 + cycleState.riverCurrent * 0.65)) {
+                riverGotitas.push({
+                    t: 0.0,
+                    speed: (0.004 + Math.random() * 0.006) * (0.8 + cycleState.riverCurrent * 1.5),
+                    size: (2 + Math.random() * 3) * baseScale
+                });
+            }
+
+            for (let i = riverGotitas.length - 1; i >= 0; i--) {
+                const g = riverGotitas[i];
+                g.t += g.speed;
+                if (g.t >= 1.0) riverGotitas.splice(i, 1);
+            }
+
+            // Giro animado de la noria de agua
+            waterWheelAngle += (0.016 + cycleState.riverCurrent * 0.09);
+
+            // Físicas de vapor
+            for (let i = steamSprites.length - 1; i >= 0; i--) {
+                const v = steamSprites[i];
+                const destX = v.targetCloud.x * cw;
+                const destY = v.targetCloud.y * ch;
+
+                v.x += (destX - v.x) * 0.028 + Math.sin(time * 6 + v.y) * 1.5;
+                v.y += (destY - v.y) * 0.035 - 1.2 * baseScale;
+
+                if (Math.hypot(destX - v.x, destY - v.y) < 35 * baseScale) {
+                    v.targetCloud.waterCharge = Math.min(1.0, v.targetCloud.waterCharge + 0.015);
+                    cloudAbsorptionPuffs.push({
+                        x: destX + (Math.random() - 0.5) * 20,
+                        y: destY + (Math.random() - 0.5) * 15,
+                        radius: 5 * baseScale,
+                        maxRadius: 28 * baseScale,
+                        alpha: 0.8
+                    });
+                    steamSprites.splice(i, 1);
+                } else if (v.y < ch * 0.05) {
+                    steamSprites.splice(i, 1);
+                }
+            }
+
+            for (let i = cloudAbsorptionPuffs.length - 1; i >= 0; i--) {
+                const p = cloudAbsorptionPuffs[i];
+                p.radius += 1.8 * baseScale;
+                p.alpha -= 0.04;
+                if (p.alpha <= 0) cloudAbsorptionPuffs.splice(i, 1);
+            }
+
+            // Físicas de ráfagas de viento polar
+            for (let i = windGusts.length - 1; i >= 0; i--) {
+                const w = windGusts[i];
+                w.x += w.speed;
+                w.alpha -= 0.006;
+                if (w.x > cw + 120 * baseScale || w.alpha <= 0) {
+                    windGusts.splice(i, 1);
+                }
+            }
+
+            // Audio en tiempo real
+            if (audioCtx) {
+                const tAudio = audioCtx.currentTime;
+                synths.windGain.gain.setTargetAtTime(isRed ? 0.35 : 0.0, tAudio, 0.2);
+                synths.rainGain.gain.setTargetAtTime(isBlue ? 0.30 : 0.0, tAudio, 0.2);
+                synths.riverGain.gain.setTargetAtTime(0.05 + cycleState.riverCurrent * 0.28, tAudio, 0.3);
+                synths.oceanGain.gain.setTargetAtTime(0.12 + (1 - cycleState.oceanLevel) * 0.15, tAudio, 0.4);
+            }
+
+            // --- 9. RENDERIZADO DEL ENTORNO ILUSTRADO ---
+            ecoCtx.clearRect(0, 0, cw, ch);
+
+            // A. Cielo atmosférico
+            const skyGrad = ecoCtx.createLinearGradient(0, 0, 0, ch * 0.7);
+            if (isBlue && isRed) {
+                skyGrad.addColorStop(0, '#334155');
+                skyGrad.addColorStop(0.6, '#64748b');
+                skyGrad.addColorStop(1, '#94a3b8');
+            } else if (isBlue) {
+                skyGrad.addColorStop(0, '#475569');
+                skyGrad.addColorStop(0.5, '#64748b');
+                skyGrad.addColorStop(1, '#bae6fd');
+            } else if (isYellow) {
+                skyGrad.addColorStop(0, '#fed7aa');
+                skyGrad.addColorStop(0.4, '#bae6fd');
+                skyGrad.addColorStop(1, '#e0f2fe');
+            } else {
+                skyGrad.addColorStop(0, '#38bdf8');
+                skyGrad.addColorStop(0.6, '#7dd3fc');
+                skyGrad.addColorStop(1, '#e0f2fe');
+            }
+            ecoCtx.fillStyle = skyGrad;
+            ecoCtx.fillRect(0, 0, cw, ch);
+
+            // B. El Sol Sonriente y Animado (con calor hacia el mar y el valle)
+            drawSmilingSun(ecoCtx, sunActor.x * cw, sunActor.y * ch, 36 * baseScale, time, sunActor.isOverMountain, sunActor.raysHeat, sunActor.seaHeat, sunActor.meadowHeat);
+
+            // C. Cordilleras y Cumbres Nevadas
+            const mPeakX = cw * 0.19;
+            const mPeakY = ch * 0.20;
+            const m2PeakX = cw * 0.08;
+            const m2PeakY = ch * 0.32;
+
+            // 1. Montaña secundaria (Fondo)
+            ecoCtx.fillStyle = '#334155';
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(-cw * 0.05, ch * 0.75);
+            ecoCtx.lineTo(m2PeakX, m2PeakY);
+            ecoCtx.lineTo(cw * 0.28, ch * 0.75);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            const tSnow = Math.min(1.0, Math.max(0.0, cycleState.snowVolume));
+            const m2LeftX = m2PeakX + tSnow * (-cw * 0.05 - m2PeakX);
+            const m2LeftY = m2PeakY + tSnow * (ch * 0.75 - m2PeakY);
+            const m2RightX = m2PeakX + tSnow * (cw * 0.28 - m2PeakX);
+            const m2RightY = m2PeakY + tSnow * (ch * 0.75 - m2PeakY);
+
+            if (tSnow > 0.04) {
+                ecoCtx.fillStyle = '#e2e8f0';
+                ecoCtx.strokeStyle = '#cbd5e1';
+                ecoCtx.lineWidth = 1.8 * baseScale;
+                ecoCtx.beginPath();
+                ecoCtx.moveTo(m2PeakX, m2PeakY);
+                ecoCtx.lineTo(m2LeftX, m2LeftY);
+                for (let sx = m2LeftX; sx <= m2RightX; sx += 14 * baseScale) {
+                    const waveY = m2LeftY + Math.sin(sx * 0.1) * (3.5 * baseScale);
+                    ecoCtx.lineTo(sx, waveY);
+                }
+                ecoCtx.lineTo(m2RightX, m2RightY);
+                ecoCtx.closePath();
+                ecoCtx.fill();
+                ecoCtx.stroke();
+            }
+
+            // 2. Montaña principal (Primer plano)
+            ecoCtx.fillStyle = '#1e293b';
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(-cw * 0.08, ch * 0.85);
+            ecoCtx.lineTo(mPeakX, mPeakY);
+            ecoCtx.lineTo(cw * 0.42, ch * 0.85);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            // Sombra facetada en ladera derecha
+            ecoCtx.fillStyle = '#0f172a';
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(mPeakX, mPeakY);
+            ecoCtx.lineTo(mPeakX + 4, mPeakY);
+            ecoCtx.lineTo(cw * 0.42, ch * 0.85);
+            ecoCtx.lineTo(mPeakX + 8, ch * 0.85);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            // Manto de nieve en montaña principal
+            const m1LeftX = mPeakX + tSnow * (-cw * 0.08 - mPeakX);
+            const m1LeftY = mPeakY + tSnow * (ch * 0.85 - mPeakY);
+            const m1RightX = mPeakX + tSnow * (cw * 0.42 - mPeakX);
+            const m1RightY = mPeakY + tSnow * (ch * 0.85 - mPeakY);
+
+            if (tSnow > 0.04) {
+                ecoCtx.fillStyle = '#ffffff';
+                ecoCtx.strokeStyle = '#e2e8f0';
+                ecoCtx.lineWidth = 2.2 * baseScale;
+                ecoCtx.beginPath();
+                ecoCtx.moveTo(mPeakX, mPeakY);
+                ecoCtx.lineTo(m1LeftX, m1LeftY);
+                for (let sx = m1LeftX; sx <= m1RightX; sx += 14 * baseScale) {
+                    const waveY = m1LeftY + Math.sin(sx * 0.08) * (4.5 * baseScale);
+                    ecoCtx.lineTo(sx, waveY);
+                }
+                ecoCtx.lineTo(m1RightX, m1RightY);
+                ecoCtx.closePath();
+                ecoCtx.fill();
+                ecoCtx.stroke();
+
+                if (isGreen) {
+                    const glintCount = Math.floor(tSnow * 6) + 2;
+                    for (let g = 0; g < glintCount; g++) {
+                        const gx = mPeakX + (Math.sin(time * 3 + g * 2) * (m1RightX - mPeakX) * 0.6);
+                        const gy = mPeakY + (g * 0.16 + 0.1) * (m1LeftY - mPeakY);
+                        ecoCtx.fillStyle = '#fef08a';
+                        ecoCtx.beginPath();
+                        ecoCtx.arc(gx, gy, (2.5 + Math.sin(time * 8 + g) * 1.5) * baseScale, 0, Math.PI * 2);
+                        ecoCtx.fill();
+                    }
+                }
+            }
+
+            // D. Colinas y Valle Verde (Pradera con casas y molino: Verde -> Amarillo -> Café según sequía/lluvia)
+            const meadowColors = getMeadowLayerColors(cycleState.grassMoisture);
+
+            // Capa 1: Colina de fondo
+            ecoCtx.fillStyle = meadowColors[0];
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(-cw * 0.05, ch * 0.72);
+            ecoCtx.quadraticCurveTo(cw * 0.18, ch * 0.52, cw * 0.45, ch * 0.58);
+            ecoCtx.quadraticCurveTo(cw * 0.65, ch * 0.62, cw * 0.76, ch * 0.78);
+            ecoCtx.lineTo(cw * 0.76, ch);
+            ecoCtx.lineTo(-cw * 0.05, ch);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            // Capa 2: Valle central
+            ecoCtx.fillStyle = meadowColors[1];
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(cw * 0.05, ch * 0.82);
+            ecoCtx.quadraticCurveTo(cw * 0.28, ch * 0.56, cw * 0.55, ch * 0.62);
+            ecoCtx.quadraticCurveTo(cw * 0.70, ch * 0.68, cw * 0.78, ch * 0.88);
+            ecoCtx.lineTo(cw * 0.78, ch);
+            ecoCtx.lineTo(cw * 0.05, ch);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            // Capa 3: Vega baja
+            ecoCtx.fillStyle = meadowColors[2];
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(cw * 0.12, ch * 0.92);
+            ecoCtx.quadraticCurveTo(cw * 0.38, ch * 0.66, cw * 0.68, ch * 0.78);
+            ecoCtx.quadraticCurveTo(cw * 0.74, ch * 0.85, cw * 0.78, ch * 0.95);
+            ecoCtx.lineTo(cw * 0.78, ch);
+            ecoCtx.lineTo(cw * 0.12, ch);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            // Pinos decorativos en las colinas verdes
+            drawPineTree(ecoCtx, cw * 0.11, ch * 0.70, 0.95 * baseScale);
+            drawPineTree(ecoCtx, cw * 0.22, ch * 0.57, 0.90 * baseScale);
+            drawPineTree(ecoCtx, cw * 0.36, ch * 0.58, 0.85 * baseScale);
+            drawPineTree(ecoCtx, cw * 0.49, ch * 0.64, 1.00 * baseScale);
+            drawPineTree(ecoCtx, cw * 0.64, ch * 0.68, 1.15 * baseScale);
+
+            // Cercas rústicas de madera
+            drawWoodenFence(ecoCtx, cw * 0.19, ch * 0.69, 32, baseScale);
+            drawWoodenFence(ecoCtx, cw * 0.29, ch * 0.78, 38, baseScale);
+            drawWoodenFence(ecoCtx, cw * 0.47, ch * 0.72, 35, baseScale);
+
+            // E. Casitas pintorescas de la Aldea (100% en el área verde)
+            drawHouse(ecoCtx, cw * 0.14, ch * 0.64, 1.40 * baseScale, '#dc2626', time);
+            drawHouse(ecoCtx, cw * 0.27, ch * 0.56, 1.35 * baseScale, '#ea580c', time + 2);
+            drawHouse(ecoCtx, cw * 0.43, ch * 0.62, 1.40 * baseScale, '#16a34a', time + 3);
+            drawHouse(ecoCtx, cw * 0.15, ch * 0.73, 1.45 * baseScale, '#0284c7', time + 1);
+            drawHouse(ecoCtx, cw * 0.24, ch * 0.74, 1.40 * baseScale, '#7c3aed', time + 5);
+            drawHouse(ecoCtx, cw * 0.17, ch * 0.85, 1.45 * baseScale, '#d97706', time + 4);
+            drawHouse(ecoCtx, cw * 0.34, ch * 0.78, 1.45 * baseScale, '#db2777', time + 6);
+            drawHouse(ecoCtx, cw * 0.49, ch * 0.80, 1.40 * baseScale, '#059669', time + 7);
+            drawHouse(ecoCtx, cw * 0.60, ch * 0.72, 1.35 * baseScale, '#e11d48', time + 8);
+            drawHouse(ecoCtx, cw * 0.54, ch * 0.90, 1.45 * baseScale, '#2563eb', time + 9);
+
+            // Molino de Agua con Noria Giratoria
+            drawWaterMill(ecoCtx, cw * 0.33, ch * 0.63, 1.25 * baseScale, waterWheelAngle, cycleState.riverCurrent);
+
+            // F. Río Serpenteante con Múltiples Curvas y Meandros
+            const rWidth = (18 + cycleState.riverCurrent * 26) * baseScale;
+            ecoCtx.lineCap = 'round';
+            ecoCtx.lineJoin = 'round';
+
+            // Lecho y orillas terrosas
+            ecoCtx.strokeStyle = '#78350f';
+            ecoCtx.lineWidth = rWidth + 10 * baseScale;
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(riverPts[0].x, riverPts[0].y);
+            for (let t = 0; t <= 1.0; t += 0.008) {
+                const pt = getRiverPointAt(riverPts, t);
+                ecoCtx.lineTo(pt.x, pt.y);
+            }
+            ecoCtx.stroke();
+
+            // Cuerpo del río con agua profunda
+            ecoCtx.strokeStyle = '#0284c7';
+            ecoCtx.lineWidth = rWidth;
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(riverPts[0].x, riverPts[0].y);
+            for (let t = 0; t <= 1.0; t += 0.008) {
+                const pt = getRiverPointAt(riverPts, t);
+                ecoCtx.lineTo(pt.x, pt.y);
+            }
+            ecoCtx.stroke();
+
+            // Corriente cristalina y espuma animada
+            ecoCtx.strokeStyle = '#38bdf8';
+            ecoCtx.lineWidth = Math.max(3.5, rWidth * 0.48);
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(riverPts[0].x, riverPts[0].y);
+            for (let t = 0; t <= 1.0; t += 0.008) {
+                const pt = getRiverPointAt(riverPts, t);
+                const waveOff = Math.sin((t * 36) - (time * 8)) * (3 * baseScale);
+                ecoCtx.lineTo(pt.x, pt.y + waveOff);
+            }
+            ecoCtx.stroke();
+
+            // Gotitas viajando por el río
+            riverGotitas.forEach(g => {
+                const pt = getRiverPointAt(riverPts, g.t);
+                ecoCtx.fillStyle = '#ffffff';
+                ecoCtx.beginPath();
+                ecoCtx.arc(pt.x, pt.y, g.size, 0, Math.PI * 2);
+                ecoCtx.fill();
+            });
+
+            // Puente de piedra sobre el meandro central
+            const bridgePt = getRiverPointAt(riverPts, 0.64);
+            ecoCtx.save();
+            ecoCtx.translate(bridgePt.x, bridgePt.y);
+            ecoCtx.fillStyle = '#78716c';
+            ecoCtx.strokeStyle = '#44403c';
+            ecoCtx.lineWidth = 2.5 * baseScale;
+            ecoCtx.beginPath();
+            ecoCtx.roundRect(-18 * baseScale, -20 * baseScale, 36 * baseScale, 40 * baseScale, 5 * baseScale);
+            ecoCtx.fill();
+            ecoCtx.stroke();
+            ecoCtx.fillStyle = '#a8a29e';
+            ecoCtx.fillRect(-20 * baseScale, -22 * baseScale, 40 * baseScale, 4.5 * baseScale);
+            ecoCtx.fillRect(-20 * baseScale, 17.5 * baseScale, 40 * baseScale, 4.5 * baseScale);
+            ecoCtx.restore();
+
+            // G. Océano Animado Dinámico
+            const minSeaY = ch * 0.74;
+            const maxSeaY = ch * 0.88;
+            const currentSeaY = minSeaY + (1 - cycleState.oceanLevel) * (maxSeaY - minSeaY);
+            const oceanStartX = cw * 0.69;
+
+            // Playa de arena
+            const shoreSurge = Math.sin(time * 2.2) * (6 * baseScale);
+            ecoCtx.fillStyle = '#fde047';
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(oceanStartX - 10 * baseScale, ch);
+            ecoCtx.quadraticCurveTo(oceanStartX + 8 * baseScale, currentSeaY - 6 * baseScale, cw, currentSeaY - 4 * baseScale);
+            ecoCtx.lineTo(cw, ch);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            // Arena húmeda
+            ecoCtx.fillStyle = '#eab308';
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(oceanStartX + shoreSurge, ch);
+            ecoCtx.quadraticCurveTo(oceanStartX + 18 * baseScale + shoreSurge, currentSeaY, cw, currentSeaY + 2 * baseScale);
+            ecoCtx.lineTo(cw, ch);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            const seaLeft = oceanStartX + 12 * baseScale;
+            const waveAmp = (4 + cycleState.oceanLevel * 8) * baseScale;
+
+            // Oleaje de fondo
+            const bgSeaGrad = ecoCtx.createLinearGradient(seaLeft, currentSeaY, cw, ch);
+            bgSeaGrad.addColorStop(0, '#0369a1');
+            bgSeaGrad.addColorStop(0.5, '#075985');
+            bgSeaGrad.addColorStop(1, '#082f49');
+            ecoCtx.fillStyle = bgSeaGrad;
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(seaLeft, ch);
+            ecoCtx.lineTo(seaLeft, currentSeaY - 4 * baseScale);
+            for (let x = seaLeft; x <= cw + 20; x += 18 * baseScale) {
+                const wy = currentSeaY - 4 * baseScale + Math.sin((x * 0.03) + (time * 2.4)) * (waveAmp * 0.7);
+                ecoCtx.lineTo(x, wy);
+            }
+            ecoCtx.lineTo(cw, ch);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            // Oleaje frontal
+            const fgSeaGrad = ecoCtx.createLinearGradient(seaLeft, currentSeaY, cw, ch);
+            fgSeaGrad.addColorStop(0, 'rgba(56, 189, 248, 0.95)');
+            fgSeaGrad.addColorStop(0.3, 'rgba(14, 165, 233, 0.92)');
+            fgSeaGrad.addColorStop(1, 'rgba(3, 105, 161, 0.96)');
+            ecoCtx.fillStyle = fgSeaGrad;
+            ecoCtx.beginPath();
+            ecoCtx.moveTo(seaLeft + 6 * baseScale, ch);
+            ecoCtx.lineTo(seaLeft + 6 * baseScale, currentSeaY);
+            for (let x = seaLeft + 6 * baseScale; x <= cw + 20; x += 16 * baseScale) {
+                const wy = currentSeaY + Math.sin((x * 0.045) + (time * 4.2)) * waveAmp;
+                ecoCtx.lineTo(x, wy);
+            }
+            ecoCtx.lineTo(cw, ch);
+            ecoCtx.closePath();
+            ecoCtx.fill();
+
+            // Crestas de espuma
+            ecoCtx.strokeStyle = '#ffffff';
+            ecoCtx.lineWidth = 3 * baseScale;
+            ecoCtx.lineCap = 'round';
+            ecoCtx.beginPath();
+            for (let x = seaLeft + 6 * baseScale; x <= cw; x += 16 * baseScale) {
+                const wy = currentSeaY + Math.sin((x * 0.045) + (time * 4.2)) * waveAmp;
+                ecoCtx.lineTo(x, wy);
+            }
+            ecoCtx.stroke();
+
+            // Efecto visual de agua calentándose por los rayos de sol (Fase Amarilla: Evaporación)
+            if (sunActor.seaHeat > 0.05) {
+                const heatAlpha = sunActor.seaHeat * (0.35 + Math.sin(time * 5) * 0.15);
+                ecoCtx.save();
+                const warmSeaGrad = ecoCtx.createLinearGradient(seaLeft, currentSeaY, cw, currentSeaY + 28 * baseScale);
+                warmSeaGrad.addColorStop(0, `rgba(254, 240, 138, ${heatAlpha * 0.85})`);
+                warmSeaGrad.addColorStop(0.45, `rgba(251, 191, 36, ${heatAlpha * 0.45})`);
+                warmSeaGrad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+                ecoCtx.fillStyle = warmSeaGrad;
+                ecoCtx.beginPath();
+                ecoCtx.moveTo(seaLeft, currentSeaY);
+                for (let x = seaLeft; x <= cw + 20; x += 16 * baseScale) {
+                    const wy = currentSeaY + Math.sin((x * 0.045) + (time * 4.2)) * waveAmp;
+                    ecoCtx.lineTo(x, wy);
+                }
+                ecoCtx.lineTo(cw, currentSeaY + 30 * baseScale);
+                ecoCtx.lineTo(seaLeft, currentSeaY + 30 * baseScale);
+                ecoCtx.closePath();
+                ecoCtx.fill();
+
+                // Destellos térmicos sobre el agua caliente
+                for (let k = 0; k < 6; k++) {
+                    const sparkX = seaLeft + ((time * 45 + k * 55) % (cw - seaLeft));
+                    const sparkY = currentSeaY + Math.sin(sparkX * 0.045 + time * 3) * waveAmp;
+                    ecoCtx.fillStyle = `rgba(255, 255, 255, ${heatAlpha * 0.9})`;
+                    ecoCtx.beginPath();
+                    ecoCtx.arc(sparkX, sparkY, (2.2 + Math.sin(time * 8 + k) * 1.4) * baseScale, 0, Math.PI * 2);
+                    ecoCtx.fill();
+                }
+                ecoCtx.restore();
+            }
+
+            // Burbujas en el océano
+            if (Math.random() < 0.25) {
+                oceanBubbles.push({
+                    x: (cw * 0.73) + Math.random() * (cw * 0.24),
+                    y: ch - 10 * baseScale,
+                    speed: (1.2 + Math.random() * 1.6) * baseScale,
+                    radius: (1.8 + Math.random() * 2.2) * baseScale,
+                    alpha: 0.8
+                });
+            }
+
+            for (let i = oceanBubbles.length - 1; i >= 0; i--) {
+                const b = oceanBubbles[i];
+                b.y -= b.speed;
+                ecoCtx.strokeStyle = `rgba(224, 242, 254, ${b.alpha * 0.8})`;
+                ecoCtx.fillStyle = `rgba(255, 255, 255, ${b.alpha * 0.35})`;
+                ecoCtx.lineWidth = 1.2 * baseScale;
+                ecoCtx.beginPath();
+                ecoCtx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ecoCtx.fill();
+                ecoCtx.stroke();
+                if (b.y <= currentSeaY + 4 * baseScale) oceanBubbles.splice(i, 1);
+            }
+
+            // Peces nadando
+            const waterDepth = ch - currentSeaY;
+            oceanFishes.forEach(f => {
+                f.timer += 0.035;
+                const fx = f.x * cw + Math.sin(f.timer) * (20 * baseScale);
+                const fy = currentSeaY + 12 * baseScale + f.depthRatio * (waterDepth - 25 * baseScale) + Math.sin(f.timer * 2.2) * (5 * baseScale);
+                drawLittleFish(ecoCtx, fx, fy, f.flip, time);
+            });
+
+            // Delfín acrobático saltarín
+            jumpingDolphin.timer += 0.014;
+            if (!jumpingDolphin.active && Math.sin(jumpingDolphin.timer) > 0.88) {
+                jumpingDolphin.active = true;
+                jumpingDolphin.progress = 0;
+                jumpingDolphin.startX = 0.76 + Math.random() * 0.08;
+            }
+
+            if (jumpingDolphin.active) {
+                jumpingDolphin.progress += 0.022;
+                const p = jumpingDolphin.progress;
+                const dX = (cw * jumpingDolphin.startX) + (p * cw * 0.12);
+                const jumpHeight = (50 + cycleState.oceanLevel * 20) * baseScale;
+                const dY = currentSeaY - Math.sin(p * Math.PI) * jumpHeight;
+                const dAngle = (-Math.cos(p * Math.PI) * 0.85) + 0.15;
+
+                drawDolphin(ecoCtx, dX, dY, 0.85 * baseScale, dAngle);
+
+                if (jumpingDolphin.progress >= 1) jumpingDolphin.active = false;
+            }
+
+            // H. Las 3 Nubes de Vapor
+            stormClouds.forEach(cloud => {
+                drawStormCloud(ecoCtx, cloud, time, baseScale);
+            });
+
+            // I. Gotitas de vapor que suben a las nubes
+            steamSprites.forEach(drop => {
+                drawVaporDrop(ecoCtx, drop);
+            });
+
+            cloudAbsorptionPuffs.forEach(p => {
+                ecoCtx.strokeStyle = `rgba(56, 189, 248, ${p.alpha})`;
+                ecoCtx.lineWidth = 2 * baseScale;
+                ecoCtx.beginPath();
+                ecoCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ecoCtx.stroke();
+            });
+
+            // J. Copos de Nieve
+            for (let idx = snowflakes.length - 1; idx >= 0; idx--) {
+                const s = snowflakes[idx];
+                s.y += s.vy;
+                s.x += s.vx;
+
+                // Si la nieve se aproxima al borde del valle verde, se derrite y desvanece de inmediato
+                if (s.x > cw * 0.36) {
+                    s.alpha -= 0.15;
+                }
+
+                ecoCtx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, s.alpha)})`;
+                ecoCtx.beginPath();
+                ecoCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ecoCtx.fill();
+                if (s.y > ch * 0.8 || s.alpha <= 0) snowflakes.splice(idx, 1);
+            }
+
+            // K. Gotas de Lluvia
+            ecoCtx.strokeStyle = 'rgba(125, 211, 252, 0.85)';
+            ecoCtx.lineWidth = 2 * baseScale;
+            ecoCtx.lineCap = 'round';
+            for (let i = raindrops.length - 1; i >= 0; i--) {
+                const r = raindrops[i];
+                r.x += r.vx;
+                r.y += r.vy;
+                ecoCtx.beginPath();
+                ecoCtx.moveTo(r.x, r.y);
+                ecoCtx.lineTo(r.x + r.vx * 1.5, r.y + r.len);
+                ecoCtx.stroke();
+                if (r.y > ch) raindrops.splice(i, 1);
+            }
+
+            // L. Ráfagas de Viento Polar
+            ecoCtx.save();
+            windGusts.forEach(w => {
+                ecoCtx.strokeStyle = `rgba(224, 242, 254, ${w.alpha * 0.9})`;
+                ecoCtx.lineWidth = w.thickness;
+                ecoCtx.lineCap = 'round';
+                ecoCtx.beginPath();
+
+                if (w.swirl) {
+                    const startX = w.x;
+                    const startY = w.y + Math.sin(time * 6 + w.x * 0.02) * (8 * baseScale);
+                    ecoCtx.moveTo(startX, startY);
+
+                    const midX = startX + w.len * 0.45;
+                    const midY = startY + Math.sin(time * 5) * (10 * baseScale);
+                    ecoCtx.quadraticCurveTo(startX + w.len * 0.22, startY - 12 * baseScale, midX, midY);
+
+                    const loopR = 12 * baseScale;
+                    ecoCtx.arc(midX + loopR * 0.5, midY - loopR * 0.5, loopR, Math.PI * 0.6, Math.PI * 2.8, false);
+
+                    const endX = startX + w.len;
+                    const endY = startY + 3 * baseScale;
+                    ecoCtx.quadraticCurveTo(midX + loopR * 1.4, midY, endX, endY);
+                } else {
+                    ecoCtx.moveTo(w.x, w.y);
+                    ecoCtx.bezierCurveTo(
+                        w.x + w.len * 0.35, w.y - 8 * baseScale + Math.sin(time * 7 + w.x * 0.04) * 6 * baseScale,
+                        w.x + w.len * 0.70, w.y + 8 * baseScale + Math.cos(time * 7 + w.x * 0.04) * 6 * baseScale,
+                        w.x + w.len, w.y
+                    );
+                }
+                ecoCtx.stroke();
+
+                ecoCtx.strokeStyle = `rgba(255, 255, 255, ${w.alpha * 0.95})`;
+                ecoCtx.lineWidth = Math.max(1, w.thickness * 0.42);
+                ecoCtx.stroke();
+            });
+            ecoCtx.restore();
+
+            // Rótulos didácticos flotantes
+            function drawStorySign(text, x, y, bgCol) {
+                ecoCtx.save();
+                ecoCtx.font = `bold ${Math.round(11 * baseScale)}px monospace`;
+                const pad = 8 * baseScale;
+                const tw = ecoCtx.measureText(text).width;
+                ecoCtx.fillStyle = bgCol;
+                ecoCtx.strokeStyle = '#ffffff';
+                ecoCtx.lineWidth = 1.5 * baseScale;
+                ecoCtx.beginPath();
+                ecoCtx.roundRect(x - pad, y - 12 * baseScale, tw + pad * 2, 20 * baseScale, 6 * baseScale);
+                ecoCtx.fill();
+                ecoCtx.stroke();
+                ecoCtx.fillStyle = '#ffffff';
+                ecoCtx.fillText(text, x, y + 2 * baseScale);
+                ecoCtx.restore();
+            }
+
+            const seaPercent = Math.round(cycleState.oceanLevel * 100);
+            let meadowStateLabel = "VERDE VIVO";
+            if (cycleState.grassMoisture < 0.30) meadowStateLabel = "CAFÉ SECO";
+            else if (cycleState.grassMoisture < 0.70) meadowStateLabel = "AMARILLO";
+
+            drawStorySign("🏔️ CUMBRE", mPeakX - 35 * baseScale, mPeakY - 10 * baseScale, '#0284c7');
+            drawStorySign(`🏡 VALLE (${meadowStateLabel})`, cw * 0.36, ch * 0.90, cycleState.grassMoisture < 0.35 ? '#78350f' : (cycleState.grassMoisture < 0.70 ? '#a16207' : '#059669'));
+            drawStorySign(`🌊 OCÉANO (${seaPercent}%)`, cw * 0.79, Math.min(ch * 0.90, currentSeaY + 22 * baseScale), '#0369a1');
+
+            requestAnimationFrame(loop);
+        }
+
+        // Iniciar bucle de animación
+        loop();
+    </script>
+</body>
+</html>
